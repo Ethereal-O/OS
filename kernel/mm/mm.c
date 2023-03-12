@@ -16,6 +16,7 @@
 #include <common/macro.h>
 #include <mm/buddy.h>
 #include <mm/slab.h>
+#include <mm/kmalloc.h>
 
 extern void parse_mem_map(void);
 
@@ -77,9 +78,7 @@ void mm_init(void)
         lab2_test_buddy();
 #endif /* CHCORE_KERNEL_TEST */
 
-#ifndef CHCORE_KERNEL_TEST
-        // if defined CHCORE_KERNEL_TEST, remap the kernel will cause error
-        // ttbr1_el1 virtual addr
+        // set up the kernel heap
         u64 ttbr1_el1 = get_pages(0);
         map_range_in_pgtbl(ttbr1_el1, 0xffffff0000000000, 0x0, 0x3f000000, 0);
         map_range_in_pgtbl(ttbr1_el1,
@@ -96,7 +95,6 @@ void mm_init(void)
         asm volatile("msr ttbr1_el1, %[value]" : : [value] "r"(phy_addr));
         flush_tlb_all();
         kinfo("[Remap] Remap finished\n");
-#endif /* CHCORE_KERNEL_TEST */
 
         /* slab alloctor for allocating small memory regions */
         init_slab();
