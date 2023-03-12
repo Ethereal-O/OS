@@ -40,8 +40,26 @@ void set_page_table(paddr_t pgtbl)
  */
 static int set_pte_flags(pte_t *entry, vmr_prop_t flags, int kind)
 {
-        // Only consider USER PTE now.
-        BUG_ON(kind != USER_PTE);
+        // // Only consider USER PTE now.
+        // BUG_ON(kind != USER_PTE);
+
+        // support KERNEL PTE now
+        if (kind == KERNEL_PTE) {
+                entry->l3_page.PXN = AARCH64_MMU_ATTR_PAGE_PX;
+                entry->l3_page.UXN = AARCH64_MMU_ATTR_PAGE_UXN;
+                entry->l3_page.AF = AARCH64_MMU_ATTR_PAGE_AF_ACCESSED;
+                entry->l3_page.nG = 1;
+                entry->l3_page.SH = INNER_SHAREABLE;
+                if (flags & VMR_DEVICE) {
+                        entry->l3_page.attr_index = DEVICE_MEMORY;
+                        entry->l3_page.SH = 0;
+                } else if (flags & VMR_NOCACHE) {
+                        entry->l3_page.attr_index = NORMAL_MEMORY_NOCACHE;
+                } else {
+                        entry->l3_page.attr_index = NORMAL_MEMORY;
+                }
+                return 0;
+        }
 
         /*
          * Current access permission (AP) setting:
@@ -143,15 +161,20 @@ static int get_next_ptp(ptp_t *cur_ptp, u32 level, vaddr_t va, ptp_t **next_ptp,
                          * `next_table_addr` of new pte
                          */
 
+                        // alloc a new page table page
                         new_ptp = get_pages(0);
                         memset(new_ptp, 0, PAGE_SIZE);
                         new_ptp_paddr = virt_to_phys(new_ptp);
+
+                        // set the attr `is_valid`, `is_table` and
+                        // `next_table_addr` of new pte
                         new_pte_val.pte = 0;
                         new_pte_val.table.is_valid = 1;
                         new_pte_val.table.is_table = 1;
                         new_pte_val.table.next_table_addr = new_ptp_paddr
                                                             >> PAGE_SHIFT;
 
+                        // set the new pte
                         entry->pte = new_pte_val.pte;
 
                         /* LAB 2 TODO 3 END */
@@ -228,12 +251,14 @@ int query_in_pgtbl(void *pgtbl, vaddr_t va, paddr_t *pa, pte_t **entry)
          * return the pa and pte until a L0/L1 block or page, return
          * `-ENOMAPPING` if the va is not mapped.
          */
+        // walk through each level of page table
         ptp_t *cur_ptp = pgtbl;
         for (int i = 0; i < TOT_LEVEL; i++) {
                 ptp_t *next_ptp;
                 pte_t *pte;
                 paddr_t offset, pfn;
                 int ret = get_next_ptp(cur_ptp, i, va, &next_ptp, &pte, false);
+                // return the pa and pte until a L0/L1 block or page
                 switch (ret) {
                 case -ENOMAPPING:
                         return -ENOMAPPING;
@@ -289,28 +314,30 @@ int map_range_in_pgtbl(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
          * pte with the help of `set_pte_flags`. Iterate until all pages are
          * mapped.
          */
-        size_t mapped = 0;
-        while (mapped < len) {
+        size_t has_mapped = 0;
+        while (has_mapped < len) {
                 ptp_t *cur_ptp = pgtbl;
                 ptp_t *next_ptp;
                 pte_t *tmp_pte;
+                // get right ptp
                 for (int i = 0; i < INDEX_MAP_4K; i++) {
                         get_next_ptp(cur_ptp,
                                      i,
-                                     va + mapped,
+                                     va + has_mapped,
                                      &next_ptp,
                                      &tmp_pte,
                                      true);
                         cur_ptp = next_ptp;
                 }
-                u32 index = GET_L3_INDEX(va + mapped);
+                // fill in the right pte
+                u32 index = GET_L3_INDEX(va + has_mapped);
                 pte_t *entry = &(cur_ptp->ent[index]);
                 set_pte_flags(
                         entry, flags, va >= KBASE ? KERNEL_PTE : USER_PTE);
                 entry->l3_page.is_page = 1;
                 entry->l3_page.is_valid = 1;
-                entry->l3_page.pfn = (pa + mapped) >> 12;
-                mapped += (1u << 12);
+                entry->l3_page.pfn = (pa + has_mapped) >> 12;
+                has_mapped += (1u << 12);
         }
         return 0;
 
@@ -325,24 +352,26 @@ int unmap_range_in_pgtbl(void *pgtbl, vaddr_t va, size_t len)
          * mark the final level pte as invalid. Iterate until all pages are
          * unmapped.
          */
-        size_t mapped = 0;
-        while (mapped < len) {
+        size_t has_mapped = 0;
+        while (has_mapped < len) {
                 ptp_t *cur_ptp = pgtbl;
                 ptp_t *next_ptp;
                 pte_t *tmp_pte;
+                // get right ptp
                 for (int i = 0; i < INDEX_MAP_4K; i++) {
                         get_next_ptp(cur_ptp,
                                      i,
-                                     va + mapped,
+                                     va + has_mapped,
                                      &next_ptp,
                                      &tmp_pte,
                                      true);
                         cur_ptp = next_ptp;
                 }
-                u32 index = GET_L3_INDEX(va + mapped);
+                // fill in the right pte
+                u32 index = GET_L3_INDEX(va + has_mapped);
                 pte_t *entry = &(next_ptp->ent[index]);
                 entry->l3_page.is_valid = 0;
-                mapped += (1u << 12);
+                has_mapped += (1u << 12);
         }
         return 0;
 
@@ -353,12 +382,12 @@ int map_range_in_pgtbl_huge(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
                             vmr_prop_t flags)
 {
         /* LAB 2 TODO 4 BEGIN */
-        size_t mapped = 0;
-        while (mapped < len) {
+        size_t has_mapped = 0;
+        while (has_mapped < len) {
                 int level_index;
-                if (len >= (1 << 30) + mapped)
+                if (len >= (1 << 30) + has_mapped)
                         level_index = INDEX_MAP_1G;
-                else if (len >= (1 << 21) + mapped)
+                else if (len >= (1 << 21) + has_mapped)
                         level_index = INDEX_MAP_2M;
                 else
                         level_index = INDEX_MAP_4K;
@@ -366,50 +395,52 @@ int map_range_in_pgtbl_huge(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
                 ptp_t *cur_ptp = pgtbl;
                 ptp_t *next_ptp;
                 pte_t *tmp_pte;
+                // get right ptp
                 for (int i = 0; i < level_index; i++) {
                         get_next_ptp(cur_ptp,
                                      i,
-                                     va + mapped,
+                                     va + has_mapped,
                                      &next_ptp,
                                      &tmp_pte,
                                      true);
                         cur_ptp = next_ptp;
                 }
+                // fill in the right pte
                 u32 index;
                 pte_t *entry;
                 switch (level_index) {
                 case INDEX_MAP_1G:
-                        index = GET_L1_INDEX(va + mapped);
+                        index = GET_L1_INDEX(va + has_mapped);
                         entry = &(cur_ptp->ent[index]);
                         set_pte_flags(entry,
                                       flags,
                                       va >= KBASE ? KERNEL_PTE : USER_PTE);
                         entry->l1_block.is_table = 0;
                         entry->l1_block.is_valid = 1;
-                        entry->l1_block.pfn = (pa + mapped) >> 30;
-                        mapped += (1u << 30);
+                        entry->l1_block.pfn = (pa + has_mapped) >> 30;
+                        has_mapped += (1u << 30);
                         break;
                 case INDEX_MAP_2M:
-                        index = GET_L2_INDEX(va + mapped);
+                        index = GET_L2_INDEX(va + has_mapped);
                         entry = &(cur_ptp->ent[index]);
                         set_pte_flags(entry,
                                       flags,
                                       va >= KBASE ? KERNEL_PTE : USER_PTE);
                         entry->l2_block.is_table = 0;
                         entry->l2_block.is_valid = 1;
-                        entry->l2_block.pfn = (pa + mapped) >> 21;
-                        mapped += (1u << 21);
+                        entry->l2_block.pfn = (pa + has_mapped) >> 21;
+                        has_mapped += (1u << 21);
                         break;
                 case INDEX_MAP_4K:
-                        index = GET_L3_INDEX(va + mapped);
+                        index = GET_L3_INDEX(va + has_mapped);
                         entry = &(cur_ptp->ent[index]);
                         set_pte_flags(entry,
                                       flags,
                                       va >= KBASE ? KERNEL_PTE : USER_PTE);
                         entry->l3_page.is_page = 1;
                         entry->l3_page.is_valid = 1;
-                        entry->l3_page.pfn = (pa + mapped) >> 12;
-                        mapped += (1u << 12);
+                        entry->l3_page.pfn = (pa + has_mapped) >> 12;
+                        has_mapped += (1u << 12);
                         break;
                 default:
                         break;
@@ -423,12 +454,12 @@ int map_range_in_pgtbl_huge(void *pgtbl, vaddr_t va, paddr_t pa, size_t len,
 int unmap_range_in_pgtbl_huge(void *pgtbl, vaddr_t va, size_t len)
 {
         /* LAB 2 TODO 4 BEGIN */
-        size_t mapped = 0;
-        while (mapped < len) {
+        size_t has_mapped = 0;
+        while (has_mapped < len) {
                 int level_index;
-                if (len >= (1 << 30) + mapped)
+                if (len >= (1 << 30) + has_mapped)
                         level_index = INDEX_MAP_1G;
-                else if (len >= (1 << 21) + mapped)
+                else if (len >= (1 << 21) + has_mapped)
                         level_index = INDEX_MAP_2M;
                 else
                         level_index = INDEX_MAP_4K;
@@ -436,35 +467,37 @@ int unmap_range_in_pgtbl_huge(void *pgtbl, vaddr_t va, size_t len)
                 ptp_t *cur_ptp = pgtbl;
                 ptp_t *next_ptp;
                 pte_t *tmp_pte;
+                // get right ptp
                 for (int i = 0; i < level_index; i++) {
                         get_next_ptp(cur_ptp,
                                      i,
-                                     va + mapped,
+                                     va + has_mapped,
                                      &next_ptp,
                                      &tmp_pte,
                                      true);
                         cur_ptp = next_ptp;
                 }
+                // fill in the right pte
                 u32 index;
                 pte_t *entry;
                 switch (level_index) {
                 case INDEX_MAP_1G:
-                        index = GET_L1_INDEX(va + mapped);
+                        index = GET_L1_INDEX(va + has_mapped);
                         entry = &(cur_ptp->ent[index]);
                         entry->l1_block.is_valid = 0;
-                        mapped += (1u << 30);
+                        has_mapped += (1u << 30);
                         break;
                 case INDEX_MAP_2M:
-                        index = GET_L2_INDEX(va + mapped);
+                        index = GET_L2_INDEX(va + has_mapped);
                         entry = &(cur_ptp->ent[index]);
                         entry->l2_block.is_valid = 0;
-                        mapped += (1u << 21);
+                        has_mapped += (1u << 21);
                         break;
                 case INDEX_MAP_4K:
-                        index = GET_L3_INDEX(va + mapped);
+                        index = GET_L3_INDEX(va + has_mapped);
                         entry = &(cur_ptp->ent[index]);
                         entry->l3_page.is_valid = 0;
-                        mapped += (1u << 12);
+                        has_mapped += (1u << 12);
                         break;
                 default:
                         break;
