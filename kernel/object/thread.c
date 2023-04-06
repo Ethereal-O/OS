@@ -109,6 +109,25 @@ static u64 load_binary(struct cap_group *cap_group, struct vmspace *vmspace,
                         seg_sz = elf->p_headers[i].p_memsz;
                         p_vaddr = elf->p_headers[i].p_vaddr;
                         /* LAB 3 TODO BEGIN */
+                        size_t file_sz = elf->p_headers[i].p_filesz;
+                        flags = PFLAGS2VMRFLAGS(elf->p_headers[i].p_flags);
+
+                        // map the segment
+                        u64 p_vaddr_begin = ROUND_DOWN(p_vaddr, PAGE_SIZE);
+                        u64 p_vaddr_end = ROUND_UP(p_vaddr + seg_sz, PAGE_SIZE);
+                        seg_map_sz = p_vaddr_end - p_vaddr_begin;
+                        create_pmo(seg_map_sz, PMO_DATA, cap_group, &pmo);
+                        ret = vmspace_map_range(
+                                vmspace, p_vaddr_begin, seg_map_sz, flags, pmo);
+                        BUG_ON(ret != 0);
+
+                        // load data and set other's memory to 0
+                        u64 pmo_begin = phys_to_virt(pmo->start) + p_vaddr
+                                        - p_vaddr_begin;
+                        memcpy(pmo_begin,
+                               bin + elf->p_headers[i].p_offset,
+                               file_sz);
+                        memset(pmo_begin + file_sz, 0, seg_sz - file_sz);
 
                         /* LAB 3 TODO END */
                         BUG_ON(ret != 0);
@@ -399,6 +418,7 @@ void sys_thread_exit(void)
         printk("\nBack to kernel.\n");
 #endif
         /* LAB 3 TODO BEGIN */
+        current_thread->thread_ctx->thread_exit_state = TE_EXITING;
 
         /* LAB 3 TODO END */
         /* Reschedule */
