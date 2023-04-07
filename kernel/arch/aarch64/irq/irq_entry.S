@@ -191,6 +191,8 @@ sync_el0_64:
 	mrs	x2, elr_el1
 	bl	handle_entry_c
 
+	/* add unlock_kernel here */
+	bl	unlock_kernel
 	exception_exit
 
 el0_syscall:
@@ -206,6 +208,7 @@ el0_syscall:
 	stp	x14, x15, [sp, #16 * 7]
 	
 	/* LAB 4 TODO BEGIN */
+	bl lock_kernel
 
 	/* LAB 4 TODO END */
 
@@ -227,6 +230,8 @@ el0_syscall:
 	/* Ret from syscall */
 	str	x0, [sp]
 
+	/* add unlock_kernel here */
+	bl	unlock_kernel
 	exception_exit
 
 
@@ -250,5 +255,7 @@ BEGIN_FUNC(__eret_to_thread)
 	mov	sp, x0
 	dmb ish
 
+	/* add unlock_kernel here */
+	bl	unlock_kernel
 	exception_exit
 END_FUNC(__eret_to_thread)
