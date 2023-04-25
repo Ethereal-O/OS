@@ -352,11 +352,11 @@ ssize_t tfs_file_write(struct inode *inode, off_t offset, const char *data,
              cur_off += to_write) {
                 page_no = cur_off / PAGE_SIZE;
                 page_off = cur_off % PAGE_SIZE;
-                to_write = cur_off + to_write > offset + size ?
-                                   offset + size - cur_off :
-                                   (cur_off + to_write > inode->size ?
-                                            inode->size - cur_off :
-                                            PAGE_SIZE - page_off);
+                to_write = PAGE_SIZE - page_off;
+                if (cur_off + to_write > offset + size)
+                        to_write = offset + size - cur_off;
+                if (cur_off + to_write > inode->size)
+                        to_write = inode->size - cur_off;
                 page = radix_get(&inode->data, page_no);
                 if (page != NULL)
                         memcpy(page + page_off,
@@ -389,11 +389,11 @@ ssize_t tfs_file_read(struct inode *inode, off_t offset, char *buff,
              cur_off += to_read) {
                 page_no = cur_off / PAGE_SIZE;
                 page_off = cur_off % PAGE_SIZE;
-                to_read = cur_off + to_read > offset + size ?
-                                  offset + size - cur_off :
-                                  (cur_off + to_read > inode->size ?
-                                           inode->size - cur_off :
-                                           PAGE_SIZE - page_off);
+                to_read = PAGE_SIZE - page_off;
+                if (cur_off + to_read > offset + size)
+                        to_read = offset + size - cur_off;
+                if (cur_off + to_read > inode->size)
+                        to_read = inode->size - cur_off;
                 page = radix_get(&inode->data, page_no);
                 if (page == NULL)
                         memset(buff + cur_off - offset, 0, to_read);
