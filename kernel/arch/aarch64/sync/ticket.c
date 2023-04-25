@@ -93,6 +93,17 @@ void unlock(struct lock *l)
         smp_mb(); /* load, store -> store barrier may use stlr here */
         /* LAB 4: set the correct lock->owner */
         /* LAB 4 TODO BEGIN */
+        // lock->owner++;
+        u32 lockval = 0, newval = 0, ret = 0;
+        asm volatile(
+                "       prfm    pstl1strm, %3\n"
+                "1:     ldaxr   %w0, %3\n"
+                "       add     %w1, %w0, #0x1\n"
+                "       stxr    %w2, %w1, %3\n"
+                "       cbnz    %w2, 1b\n"
+                : "=&r"(lockval), "=&r"(newval), "=&r"(ret), "+Q"(lock->owner)
+                :
+                : "memory");
 
         /* LAB 4 TODO END */
 }
@@ -102,6 +113,25 @@ int is_locked(struct lock *l)
         int ret = 0;
         struct lock_impl *lock = (struct lock_impl *)l;
         /* LAB 4 TODO BEGIN */
+        // ret = lock->owner != lock->next;
+        u32 lockval = 0, ownerval = 0;
+        asm volatile("       prfm    pstl1strm, %3\n"
+                     "       prfm    pstl1strm, %4\n"
+                     "1:     ldar    %w0, %3\n"
+                     "       ldar    %w1, %4\n"
+                     "       cmp     %w0, %w1\n"
+                     "       b.ne    2f\n" /* fail */
+                     "       mov     %w2, #0x0\n" /* success */
+                     "       b       3f\n"
+                     "2:     mov     %w2, #0x1\n" /* fail */
+                     "3:\n"
+                     : "=&r"(lockval),
+                       "=&r"(ownerval),
+                       "=&r"(ret),
+                       "+Q"(lock->next),
+                       "+Q"(lock->owner)
+                     :
+                     : "memory");
 
         /* LAB 4 TODO END */
         return ret;
@@ -118,6 +148,7 @@ void kernel_lock_init(void)
         u32 ret = 0;
 
         /* LAB 4 TODO BEGIN */
+        lock_init(&big_kernel_lock);
 
         /* LAB 4 TODO END */
         BUG_ON(ret != 0);
@@ -130,6 +161,7 @@ void kernel_lock_init(void)
 void lock_kernel(void)
 {
         /* LAB 4 TODO BEGIN */
+        lock(&big_kernel_lock);
 
         /* LAB 4 TODO END */
 }
@@ -142,6 +174,7 @@ void unlock_kernel(void)
 {
         BUG_ON(!is_locked(&big_kernel_lock));
         /* LAB 4 TODO BEGIN */
+        unlock(&big_kernel_lock);
 
         /* LAB 4 TODO END */
 }
