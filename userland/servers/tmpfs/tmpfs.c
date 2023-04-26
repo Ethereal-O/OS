@@ -151,14 +151,14 @@ static int tfs_mknod(struct inode *dir, const char *name, size_t len, int mkdir)
                 return -ENOENT;
         }
         /* LAB 5 TODO BEGIN */
-        if (mkdir) {
+        if (mkdir)
                 inode = new_dir();
-        } else {
+        else
                 inode = new_reg();
-        }
-        if (IS_ERR(inode)) {
+
+        if (IS_ERR(inode))
                 return PTR_ERR(inode);
-        }
+
         dent = new_dent(inode, name, len);
         if (IS_ERR(dent)) {
                 free(inode);
