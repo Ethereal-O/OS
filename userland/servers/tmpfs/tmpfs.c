@@ -448,7 +448,6 @@ int tfs_load_image(const char *start)
                         tfs_file_write(
                                 dent->inode, 0, f->data, f->header.c_filesize);
                 }
-
                 /* LAB 5 TODO END */
         }
 
