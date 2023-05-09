@@ -36,6 +36,7 @@ void enable_smp_cores(paddr_t boot_flag)
                  * _start. Then, what's the flag?
                  */
                 /* LAB 4 TODO BEGIN */
+                secondary_boot_flag[i] = 1;
 
                 /* LAB 4 TODO END */
 
@@ -48,6 +49,8 @@ void enable_smp_cores(paddr_t boot_flag)
                  * before activating the next one
                  */
                 /* LAB 4 TODO BEGIN */
+                while (cpu_status[i] != cpu_run)
+                        ;
 
                 /* LAB 4 TODO END */
                 if (cpu_status[i] == cpu_run)

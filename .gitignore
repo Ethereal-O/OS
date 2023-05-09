@@ -31,4 +31,5 @@ make-tag.sh
 
 __pycache__
 .clangd
+.cache
 compile_commands.json
