@@ -170,6 +170,7 @@ extern char getch();
 char *readline(const char *prompt)
 {
         static char buf[BUFLEN];
+        memset(buf, 0, BUFLEN);
 
         int i = 0, j = 0;
         signed char c = 0;
