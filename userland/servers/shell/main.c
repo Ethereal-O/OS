@@ -74,7 +74,7 @@ int main(int argc, char *argv[])
                 }
                 for (int j = 0; j < 100; j++)
                 {
-                        // printf("id: %d\n", j);
+                        printf("times: %d", j);
                         __chcore_sys_yield();
                 }
                         
