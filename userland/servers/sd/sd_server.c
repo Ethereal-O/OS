@@ -35,9 +35,7 @@ static int sdcard_readblock(int lba, char *buffer)
         if (sd_Read(buffer, BLOCK_SIZE) < 0)
                 return -1;
 
-        
         return 0;
-        
 
         /* BLANK END */
         /* LAB 6 TODO END */
@@ -48,7 +46,7 @@ static int sdcard_writeblock(int lba, const char *buffer)
 {
         /* LAB 6 TODO BEGIN */
         /* BLANK BEGIN */
-	int offset = lba * BLOCK_SIZE;
+        int offset = lba * BLOCK_SIZE;
         Seek(offset);
         if (sd_Write(buffer, BLOCK_SIZE) < 0)
                 return -1;
