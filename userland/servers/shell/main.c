@@ -72,6 +72,12 @@ int main(int argc, char *argv[])
                 if ((ret = run_cmd(buf)) < 0) {
                         printf("Cannot run %s, ERROR %d\n", buf, ret);
                 }
+                for (int j = 0; j < 100; j++)
+                {
+                        printf("id: %d\n", j);
+                        __chcore_sys_yield();
+                }
+                        
         }
 
         return 0;
